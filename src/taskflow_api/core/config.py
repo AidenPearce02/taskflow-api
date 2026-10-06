@@ -15,15 +15,20 @@ class Settings(BaseSettings):
     db_host: str
     db_port: int = 5432
 
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+
     @property
     def db_url(self) -> URL:
         return URL.create(
             "postgresql+psycopg",
-            username = self.db_user,
-            password = self.db_password, 
-            host = self.db_host,
-            port = self.db_port,
-            database=self.db_name
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
+            database=self.db_name,
         )
+
 
 settings = Settings()

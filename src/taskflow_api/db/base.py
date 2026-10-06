@@ -11,6 +11,7 @@ POSTGRES_INDEXES_NAMING_CONVENTION = {
 
 metadata = MetaData(naming_convention=POSTGRES_INDEXES_NAMING_CONVENTION)
 
+
 class Base(DeclarativeBase):
     metadata = metadata
     __mapper_args__ = {"eager_defaults": True}

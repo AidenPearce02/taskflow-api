@@ -1,0 +1,45 @@
+{
+    "ruff.configuration": ".ruff.toml",
+    "[python]": {
+      "editor.formatOnType": true,
+      "editor.defaultFormatter": "charliermarsh.ruff",
+      "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": {
+        "source.organizeImports.ruff": "always",
+        "source.fixAll": "always"
+      }
+    },
+    "files.exclude": {
+      "**/*-report.*/**": true,
+      "**/*.egg-info/**": true,
+      "**/.coverage/**": true,
+      "**/.git/**": true,
+      "**/.mypy_cache/**": true,
+      "**/.pytest_cache/**": true,
+      "**/.tox/**": true,
+      "**/__pycache__/**": true,
+      "**/htmlcov/**": true
+    },
+    "files.watcherExclude": {
+      "**/*.egg-info/**": true,
+      "**/.egg-info/**": true,
+      "**/.git/**": true,
+      "**/.mypy_cache/**": true,
+      "**/.pytest_cache/**": true,
+      "**/.tox/**": true,
+      "**/.venv/**": true,
+      "**/__pycache__/**": true,
+      "**/htmlcov/**": true
+    },
+    "search.exclude": {
+      "**/*.egg-info/": true,
+      "**/*.html": true,
+      "**/.git": true,
+      "**/.mypy": true,
+      "**/.tox": true,
+      "**/htmlcov/": true,
+      "**/repos/**": true,
+      "**/site-packages/**": true,
+      "**/test-report.xml": true
+    }
+}

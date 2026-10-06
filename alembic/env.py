@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, pool
 from alembic import context
 from taskflow_api.core.config import settings
 from taskflow_api.db import base
+from taskflow_api.db.models import user  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -60,15 +61,10 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = create_engine(
-        settings.db_url,
-        poolclass=pool.NullPool
-    )
+    connectable = create_engine(settings.db_url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

@@ -7,6 +7,7 @@ services:
       - .env
     volumes:
       - ./src:/app/src
+      - ./alembic:/app/alembic
     ports:
       - ${API_PORT}:${API_PORT}
     depends_on:
