@@ -1,21 +1,21 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import UUID, DateTime, String
+from sqlalchemy import UUID, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from taskflow_api.db.base import Base
 from taskflow_api.db.models.project_member import ProjectMember
 
 
-class User(Base):
-    __tablename__ = "users"
+class Project(Base):
+    __tablename__ = "projects"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    email: Mapped[str] = mapped_column(String(length=320), nullable=False, unique=True)
-    password_hash: Mapped[str] = mapped_column(String(length=1024), nullable=False)
+    name: Mapped[str] = mapped_column(String(length=200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -25,6 +25,6 @@ class User(Base):
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
-    project_memberships: Mapped[list[ProjectMember]] = relationship(
-        back_populates="user"
+    members: Mapped[list[ProjectMember]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
     )

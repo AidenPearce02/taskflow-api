@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from taskflow_api.core.config import settings
-from taskflow_api.db.database import get_db
 from taskflow_api.db.models.user import User
+from taskflow_api.dependencies.database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 

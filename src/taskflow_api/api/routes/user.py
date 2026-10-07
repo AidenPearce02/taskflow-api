@@ -4,18 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from taskflow_api.api.schemas.users import UserCreate, UserResponse
+from taskflow_api.api.schemas.user import UserCreate, UserResponse
 from taskflow_api.core.security import hash_password
-from taskflow_api.db.database import get_db
 from taskflow_api.db.models.user import User
 from taskflow_api.dependencies.auth import get_current_user
+from taskflow_api.dependencies.database import get_db
 
 router = APIRouter()
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def create_user(data: UserCreate, db: Annotated[Session, Depends(get_db)]):
-    existing_user = db.scalar(select(User).where(User.email == data.email))
+def create_user(user_data: UserCreate, db: Annotated[Session, Depends(get_db)]):
+    existing_user = db.scalar(select(User).where(User.email == user_data.email))
 
     if existing_user:
         raise HTTPException(
@@ -23,7 +23,9 @@ def create_user(data: UserCreate, db: Annotated[Session, Depends(get_db)]):
             detail="Already created with this email",
         )
 
-    new_user = User(email=data.email, password_hash=hash_password(data.password))
+    new_user = User(
+        email=user_data.email, password_hash=hash_password(user_data.password)
+    )
 
     db.add(new_user)
     db.commit()

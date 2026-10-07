@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from taskflow_api.api.schemas.auth import TokenResponse
 from taskflow_api.core.security import create_access_token, verify_password
-from taskflow_api.db.database import get_db
 from taskflow_api.db.models.user import User
+from taskflow_api.dependencies.database import get_db
 
 router = APIRouter()
 
