@@ -5,4 +5,4 @@ from taskflow_api.core.config import settings
 
 engine = create_engine(settings.db_url, pool_pre_ping=True)
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False)
+session_factory = sessionmaker(bind=engine, autoflush=False)

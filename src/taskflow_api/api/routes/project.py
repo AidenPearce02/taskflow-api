@@ -7,8 +7,6 @@ from sqlalchemy.orm import Session
 
 from taskflow_api.api.schemas.project import (
     ProjectCreate,
-    ProjectMemberAdd,
-    ProjectMemberResponse,
     ProjectResponse,
     ProjectUpdate,
 )
@@ -114,67 +112,29 @@ def update_project(
     return project
 
 
-@router.post(
-    "/{project_id}/members",
-    status_code=status.HTTP_201_CREATED,
-    response_model=ProjectMemberResponse,
-)
-def add_member(
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(
     project_id: UUID,
-    project_member_add: ProjectMemberAdd,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-) -> ProjectMemberResponse:
-    stmt = (
-        select(Project, ProjectMember)
-        .join(ProjectMember)
+) -> None:
+    result: tuple[ProjectMember, Project] | None = db.execute(
+        select(ProjectMember, Project)
+        .join(Project)
         .where(
             ProjectMember.user_id == current_user.id,
-            Project.id == project_id,
+            ProjectMember.project_id == project_id,
         )
-    )
-    result: tuple[Project, ProjectMember] | None = db.execute(stmt).one_or_none()
+    ).one_or_none()
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project doesn't exist"
         )
-
-    project, project_member = result
-
-    who_can_add_who = {
-        ProjectRole.OWNER: {ProjectRole.ADMIN, ProjectRole.MEMBER},
-        ProjectRole.ADMIN: {ProjectRole.MEMBER},
-    }
-    if project_member_add.role not in who_can_add_who.get(project_member.role, set()):
+    current_user_membership, project = result
+    if current_user_membership.role != ProjectRole.OWNER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
 
-    new_member = db.scalar(select(User).where(User.email == project_member_add.email))
-    if not new_member:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User doesn't exist"
-        )
-
-    existing_membership = db.scalar(
-        select(ProjectMember).where(
-            ProjectMember.project_id == project.id,
-            ProjectMember.user_id == new_member.id,
-        )
-    )
-
-    if existing_membership:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User is already a project member",
-        )
-
-    membership = ProjectMember(
-        project_id=project.id, user_id=new_member.id, role=project_member_add.role
-    )
-
-    db.add(membership)
+    db.delete(project)
     db.commit()
-    db.refresh(membership)
-
-    return membership

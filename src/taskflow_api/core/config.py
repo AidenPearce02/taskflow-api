@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     db_host: str
     db_port: int = 5432
 
+    api_port: int = 8008
+
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
