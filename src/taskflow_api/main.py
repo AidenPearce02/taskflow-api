@@ -4,14 +4,17 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from taskflow_api.api.routes import auth, project, project_member, user
+from taskflow_api.api.routes import auth, project, project_member, task, user
 from taskflow_api.dependencies.database import get_db
 
 app = FastAPI()
 app.include_router(user.router, prefix="/users", tags=["Users"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(project.router, prefix="/projects", tags=["Projects"])
-app.include_router(project_member.router, prefix="/projects", tags=["Members"])
+app.include_router(
+    project_member.router, prefix="/projects/{project_id}/members", tags=["Members"]
+)
+app.include_router(task.router, prefix="/projects/{project_id}/tasks", tags=["Tasks"])
 
 
 @app.get("/health")

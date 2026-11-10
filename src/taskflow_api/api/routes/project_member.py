@@ -31,7 +31,7 @@ ROLE_REMOVABLE_BY = {
 
 
 @router.post(
-    "/{project_id}/members",
+    "",
     status_code=status.HTTP_201_CREATED,
     response_model=ProjectMemberResponse,
 )
@@ -94,7 +94,7 @@ def add_member(
     return membership
 
 
-@router.get("/{project_id}/members", response_model=list[ProjectMemberDetails])
+@router.get("", response_model=list[ProjectMemberDetails])
 def get_members(
     project_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -127,7 +127,7 @@ def get_members(
     ]
 
 
-@router.patch("/{project_id}/members/{user_id}", response_model=ProjectMemberResponse)
+@router.patch("/{user_id}", response_model=ProjectMemberResponse)
 def update_member(
     project_id: UUID,
     user_id: UUID,
@@ -186,9 +186,7 @@ def update_member(
     return update_member_membership
 
 
-@router.delete(
-    "/{project_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_member(
     project_id: UUID,
     user_id: UUID,

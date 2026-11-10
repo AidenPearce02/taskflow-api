@@ -7,6 +7,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
 from taskflow_api.api.schemas.project import ProjectMemberResponse, ProjectResponse
+from taskflow_api.api.schemas.task import TaskResponse
 from taskflow_api.api.schemas.user import UserResponse
 from taskflow_api.core.config import settings
 from taskflow_api.dependencies.database import get_db
@@ -59,6 +60,17 @@ def test_member2() -> dict[str, str]:
     return {
         "email": "member2@example.com",
         "password": "member-password",
+    }
+
+
+@pytest.fixture
+def test_task() -> dict[str, str]:
+    return {
+        "title": "string",
+        "description": "string",
+        "priority": "medium",
+        "assignee_id": None,
+        "due_date": "2026-11-03T13:43:22Z",
     }
 
 
@@ -137,6 +149,25 @@ def add_member(
         response = test_client.post(
             f"/projects/{project_id}/members",
             json={"email": email, "role": role},
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+        return response.json()
+
+    return add
+
+
+@pytest.fixture
+def create_task(
+    test_client: TestClient,
+) -> Callable[[str, dict[str, str], dict[str, str]], TaskResponse]:
+    def add(
+        project_id: str, task: dict[str, str], headers: dict[str, str]
+    ) -> TaskResponse:
+        response = test_client.post(
+            f"/projects/{project_id}/tasks",
+            json=task,
             headers=headers,
         )
         assert response.status_code == status.HTTP_201_CREATED

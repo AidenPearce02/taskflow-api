@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from taskflow_api.db.base import Base
 from taskflow_api.db.models.project_member import ProjectMember
+from taskflow_api.db.models.task import Task
 
 
 class Project(Base):
@@ -26,5 +27,8 @@ class Project(Base):
         nullable=False,
     )
     members: Mapped[list[ProjectMember]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+    tasks: Mapped[list[Task]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
