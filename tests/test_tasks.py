@@ -435,3 +435,4 @@ def test_get_tasks_with_filters(
     data = response.json()
     assert data["items"] == []
     assert data["total"] == 0
+    assert data["pages"] == 0

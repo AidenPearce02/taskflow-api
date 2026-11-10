@@ -13,3 +13,12 @@ To test: uv run pytest -v -s -k
 v - verbose
 s - to show prints
 k - for test that contains name keyword
+
+zip -r taskflow-api.zip taskflow-api \
+  -x "*/.venv/*" \
+     "*/.git/*" \
+     "*/__pycache__/*" \
+     "*/.pytest_cache/*" \
+     "*/.ruff_cache/*" \
+     "*/.env" \
+     "*/.env.*"

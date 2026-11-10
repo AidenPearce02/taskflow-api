@@ -1,0 +1,21 @@
+# Keep Ruff aligned with the project's Python version and existing style.
+target-version = "py313"
+line-length = 88
+indent-width = 4
+
+# Alembic revision files are generated and should not be reformatted
+# as part of routine lint/format runs.
+extend-exclude = ["alembic/versions"]
+
+[lint]
+# Basic syntax/style errors, unused names and import sorting.
+# Avoid enabling additional opinionated rules before reviewing existing code.
+select = ["E4", "E7", "E9", "F", "I"]
+
+[lint.isort]
+known-first-party = ["taskflow_api"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
