@@ -1,9 +1,9 @@
 # TaskFlow API — Project Status
 
-**Last updated:** 2026-11-10  
+**Last updated:** 2026-11-12  
 **Project status:** Active development  
-**Current milestone:** Task listing, filtering and pagination — completed  
-**Next milestone:** Configurable task sorting
+**Current milestone:** Task listing, filtering, pagination and sorting — completed  
+**Next milestone:** Partial task updates (`PATCH`)
 
 ## 1. Project Overview
 
@@ -66,8 +66,8 @@ Database schema changes are versioned with Alembic (three migrations).
 ### Tasks
 
 - `POST /projects/{project_id}/tasks` — create a task.
-- `GET /projects/{project_id}/tasks` — list tasks, with filtering and pagination.
-- Fixed, deterministic ordering: `created_at DESC, id DESC`.
+- `GET /projects/{project_id}/tasks` — list tasks with filtering, pagination and configurable multi-field sorting.
+- Default ordering: `created_at DESC, id DESC`; an explicit sort overrides the primary ordering, with `id DESC` retained as a tie-breaker.
 
 Task fields: `id`, `project_id`, `title`, `description`, `status`, `priority`, `assignee_id`, `due_date`, `created_at`, `updated_at`.
 
@@ -79,7 +79,7 @@ Task fields: `id`, `project_id`, `title`, `description`, `status`, `priority`, `
 - `GET /health` — application health endpoint.
 - `GET /health/db` — database connectivity check.
 
-**Not implemented yet:** configurable task sorting, task detail retrieval, task update and task deletion endpoints.
+**Not implemented yet:** task detail retrieval, task update and task deletion endpoints.
 
 ## 5. Important Business Rules
 
@@ -110,12 +110,26 @@ Current limitation: removing a project member does not automatically clear task 
 | `assignee_id` | Filter by assignee UUID | None |
 | `page` | Page number, minimum 1 | 1 |
 | `limit` | Items per page, 1–100 | 20 |
+| `sort` | Comma-separated sort fields, optional `-` for descending order; up to 3 fields | `-created_at` |
 
 Filters are combined with `AND`. The list and count queries use the same conditions, so `total` counts **matching tasks**, not all tasks in the project.
 
 Response fields: `items`, `total`, `page`, `limit`, `pages`.
 
-When no tasks match: `items = []`, `total = 0`, `pages = 0`. The endpoint uses a stable fixed order (`created_at DESC, id DESC`) before applying offset/limit pagination.
+When no tasks match: `items = []`, `total = 0`, `pages = 0`.
+
+Sorting contract:
+
+- Allowed fields: `created_at`, `updated_at`, `due_date`, `priority`, `status`, `title`.
+- Example: `?sort=-priority,due_date` sorts by priority descending, then due date ascending.
+- A leading `-` means descending; no prefix means ascending. The order of fields determines sort precedence.
+- At most three distinct fields; empty, unknown or duplicate fields return HTTP 422.
+- `priority` uses business order `low < medium < high`, and `status` uses `todo < in_progress < done`, implemented using SQLAlchemy `case()` expressions.
+- For `due_date`, `NULLS LAST` applies in both directions, within each preceding sort group.
+- Sorting runs in PostgreSQL before `OFFSET`/`LIMIT`; `id DESC` is appended as a deterministic tie-breaker. Offset pagination can still shift across requests if records change.
+- Without `sort`, the order is `created_at DESC, id DESC`.
+
+Query parameters are grouped in a Pydantic `TaskListQueryParams` model. The `sort` string is validated and exposed as parsed fields; `build_task_order_clauses()` in `api/routes/task.py` maps those fields to SQLAlchemy expressions.
 
 ## 6. Database Models and Migrations
 
@@ -134,11 +148,11 @@ Notable relationships:
 
 Tasks use UUID primary keys, foreign keys to projects and users, non-null status/priority values, and timezone-aware datetime columns. Deleting a project cascades to its tasks at the database level.
 
-Known migration follow-up: the task migration's `downgrade()` drops the table but does not explicitly drop PostgreSQL enum types `task_status` and `task_priority`. Consider this when reviewing downgrade/re-upgrade behavior; it is not part of the current sorting milestone.
+Known migration follow-up: the task migration's `downgrade()` drops the table but does not explicitly drop PostgreSQL enum types `task_status` and `task_priority`. Consider this when reviewing downgrade/re-upgrade behavior; no migration was needed for task sorting.
 
 ## 7. Testing
 
-The repository contains **60 test functions**, including **9 task tests**, using pytest and FastAPI TestClient.
+Before sorting was added, the repository contained **60 test functions**, including **9 task tests**. Additional sorting tests have since been added; the exact current total has not been independently verified. Tests use pytest and FastAPI TestClient.
 
 Task tests cover:
 
@@ -148,31 +162,32 @@ Task tests cover:
 - Filtering by status, priority and assignee.
 - Combined status/priority filtering.
 - Filtered `total` and empty-result responses, including `pages == 0` when no tasks match.
+- Sorting by a single field, including Enum business order and nullable due dates.
+- Multi-field sorting with pagination and invalid sort parameters (including duplicates, unsupported fields, too many fields and empty values).
 
 Test fixtures use a separate PostgreSQL database (`taskflow_test`) with transaction/savepoint isolation. The database must exist and have migrations applied.
 
-**Verification status:** All 60 tests passed in the developer's local environment on 2026-11-10 (developer-confirmed). The suite was not independently re-run the run current code.
+**Verification status:** The developer confirmed on 2026-11-12 that all tests passed after implementing sorting. The updated code and suite were not independently re-run for this status update; no new exact test count is claimed.
 
 ## 8. Current Development Status
 
-The task-listing implementation already supports pagination, three filters, filtered counts and deterministic ordering.
+**Completed:** Task creation and task listing with filtering, pagination, filtered counts, configurable multi-field sorting, Enum business ordering, deterministic tie-breaking and `NULLS LAST` for due dates.
 
-The task-listing, filtering and pagination milestone is **complete**. The test suite passed locally (60 tests, developer-confirmed), and the empty-result `pages == 0` assertion is included in the current code.
+The sorting milestone is considered **complete** based on the implementation reviewed in conversation and developer-confirmed passing tests on 2026-11-12. This status update does not independently verify the latest source archive.
 
-The next incremental development step is configurable sorting for `GET /projects/{project_id}/tasks`. No configurable sort parameters are implemented yet.
+**Next milestone:** Partial task updates (`PATCH /projects/{project_id}/tasks/{task_id}`). Define updateable fields and permissions first; then implement partial-update semantics, validation and focused integration tests.
 
 ## 9. Recommended Next Steps
 
 In order:
 
-1. Design configurable task sorting for `GET /projects/{project_id}/tasks`: supported fields, sort direction, validation, default behavior and deterministic pagination order.
-2. Implement sorting in a small increment, following the existing endpoint architecture.
-3. Add focused tests for supported/invalid sorting and stable ordering with pagination.
+1. Define business rules for task updates: who may edit which fields, whether status transitions are restricted, and how assignee membership is validated.
+2. Implement `TaskUpdate` and `PATCH /projects/{project_id}/tasks/{task_id}`. Distinguish omitted fields from explicit `null` (e.g. with `model_dump(exclude_unset=True)`).
+3. Test partial updates, permissions, assignee validation, nullable field clearing and invalid input.
 4. Implement task detail retrieval (`GET /projects/{project_id}/tasks/{task_id}`).
-5. Implement partial task updates (`PATCH`), including relevant authorization and assignee-membership checks.
-6. Implement task deletion and review permissions across task endpoints.
-7. Address known integrity/migration limitations when their related workflows are revisited.
-8. Review indexes, production configuration, logging and deployment based on actual needs.
+5. Implement task deletion (`DELETE /projects/{project_id}/tasks/{task_id}`) and review permissions across task endpoints.
+6. Address known membership/assignment integrity and enum-migration downgrade limitations when related workflows are revisited.
+7. Review indexes, production configuration, logging and deployment based on actual needs.
 
 These are milestones, not a requirement to build everything at once. Keep iterations small and review the existing code before introducing changes.
 

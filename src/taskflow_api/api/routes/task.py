@@ -3,10 +3,18 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
-from taskflow_api.api.schemas.task import TaskCreate, TaskListResponse, TaskResponse
+from taskflow_api.api.schemas.task import (
+    SortParam,
+    TaskCreate,
+    TaskListQueryParams,
+    TaskListResponse,
+    TaskResponse,
+    TaskSortField,
+)
 from taskflow_api.db.models.project_member import ProjectMember
 from taskflow_api.db.models.task import Task, TaskPriority, TaskStatus
 from taskflow_api.db.models.user import User
@@ -54,16 +62,49 @@ def create_task(
     return task
 
 
+priority_order = case(
+    (Task.priority == TaskPriority.LOW, 1),
+    (Task.priority == TaskPriority.MEDIUM, 2),
+    (Task.priority == TaskPriority.HIGH, 3),
+)
+
+status_order = case(
+    (Task.status == TaskStatus.TODO, 1),
+    (Task.status == TaskStatus.IN_PROGRESS, 2),
+    (Task.status == TaskStatus.DONE, 3),
+)
+
+sort_columns = {
+    TaskSortField.CREATED_AT: Task.created_at,
+    TaskSortField.UPDATED_AT: Task.updated_at,
+    TaskSortField.DUE_DATE: Task.due_date,
+    TaskSortField.TITLE: Task.title,
+    TaskSortField.PRIORITY: priority_order,
+    TaskSortField.STATUS: status_order,
+}
+
+
+def build_task_order_clauses(sort_params: list[SortParam]) -> list[ColumnElement]:
+    order_clauses = []
+
+    for field, direction in sort_params:
+        column = sort_columns[field]
+
+        expression = column.desc() if direction == "desc" else column.asc()
+
+        if field == TaskSortField.DUE_DATE:
+            expression = expression.nulls_last()
+
+        order_clauses.append(expression)
+    return order_clauses
+
+
 @router.get("", status_code=status.HTTP_200_OK, response_model=TaskListResponse)
 def get_tasks(
     project_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-    task_status: Annotated[TaskStatus | None, Query(alias="status")] = None,
-    task_priority: Annotated[TaskPriority | None, Query(alias="priority")] = None,
-    assignee_id: Annotated[UUID | None, Query()] = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    params: Annotated[TaskListQueryParams, Query()],
 ) -> TaskListResponse:
     stmt = select(ProjectMember).where(
         ProjectMember.user_id == current_user.id,
@@ -75,34 +116,36 @@ def get_tasks(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project doesn't exist"
         )
 
-    offset = (page - 1) * limit
+    offset = (params.page - 1) * params.limit
 
     conditions = [Task.project_id == project_id]
-    if task_status is not None:
-        conditions.append(Task.status == task_status)
-    if task_priority is not None:
-        conditions.append(Task.priority == task_priority)
-    if assignee_id is not None:
-        conditions.append(Task.assignee_id == assignee_id)
+    if params.status is not None:
+        conditions.append(Task.status == params.status)
+    if params.priority is not None:
+        conditions.append(Task.priority == params.priority)
+    if params.assignee_id is not None:
+        conditions.append(Task.assignee_id == params.assignee_id)
+
+    order_clauses = build_task_order_clauses(params.sort_params)
 
     stmt = (
         select(Task)
         .where(*conditions)
-        .order_by(Task.created_at.desc(), Task.id.desc())
+        .order_by(*order_clauses, Task.id.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(params.limit)
     )
 
     tasks = db.scalars(stmt).all()
 
     count_stmt = select(func.count()).select_from(Task).where(*conditions)
     total = db.scalar(count_stmt) or 0
-    pages = math.ceil(total / limit)
+    pages = math.ceil(total / params.limit)
 
     return {
         "items": tasks,
         "total": total,
-        "page": page,
-        "limit": limit,
+        "page": params.page,
+        "limit": params.limit,
         "pages": pages,
     }

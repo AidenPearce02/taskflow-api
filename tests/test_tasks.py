@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
+import pytest
 from fastapi import status
 from sqlalchemy import select
 
@@ -436,3 +437,212 @@ def test_get_tasks_with_filters(
     assert data["items"] == []
     assert data["total"] == 0
     assert data["pages"] == 0
+
+
+def test_get_sorted_tasks(
+    test_client,
+    test_owner,
+    test_project,
+    test_task,
+    create_user,
+    create_task,
+    create_project,
+    auth_headers,
+):
+    create_user(test_owner)
+    owner_auth_headers = auth_headers(test_owner)
+    project_data = create_project(test_project, owner_auth_headers)
+    project_id = project_data["id"]
+
+    tasks = []
+    tasks.append(
+        create_task(
+            project_id,
+            {
+                **test_task,
+            },
+            owner_auth_headers,
+        )
+    )
+
+
+def test_get_tasks_sort_by_multiple_fields(
+    test_client,
+    test_owner,
+    test_project,
+    test_task,
+    auth_headers,
+    create_user,
+    create_task,
+    create_project,
+):
+    create_user(test_owner)
+    owner_auth_headers = auth_headers(test_owner)
+    project_data = create_project(test_project, owner_auth_headers)
+    project_id = project_data["id"]
+
+    task_payloads = [
+        {
+            "priority": TaskPriority.HIGH,
+            "due_date": (datetime.now() + timedelta(hours=3)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        },
+        {"priority": TaskPriority.LOW, "due_date": None},
+        {
+            "priority": TaskPriority.LOW,
+            "due_date": (datetime.now() + timedelta(hours=20)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        },
+        {
+            "priority": TaskPriority.LOW,
+            "due_date": (datetime.now() + timedelta(hours=15)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        },
+        {"priority": TaskPriority.MEDIUM, "due_date": None},
+    ]
+
+    tasks = [
+        create_task(project_id, {**test_task, **payload}, owner_auth_headers)
+        for payload in task_payloads
+    ]
+
+    expected_ids = [tasks[i]["id"] for i in (0, 4, 3, 2, 1)]
+
+    for page in range(1, 4):
+        response = test_client.get(
+            f"/projects/{project_id}/tasks",
+            params={
+                "sort": "-priority,due_date",
+                "limit": 2,
+                "page": page,
+            },
+            headers=owner_auth_headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        start = (page - 1) * 2
+        end = start + 2
+
+        assert [task["id"] for task in data["items"]] == expected_ids[start:end]
+        assert data["total"] == 5
+        assert data["pages"] == 3
+        assert data["page"] == page
+        assert data["limit"] == 2
+
+
+@pytest.mark.parametrize(
+    "sort",
+    [
+        "-priority,priority",
+        "-priority,due_date,status,title",
+        "unknown",
+        "",
+        "priority,",
+        ",priority",
+    ],
+)
+def test_get_tasks_invalid_sort(
+    test_client,
+    test_owner,
+    test_project,
+    auth_headers,
+    create_user,
+    create_project,
+    sort,
+):
+    create_user(test_owner)
+    owner_auth_headers = auth_headers(test_owner)
+    project_data = create_project(test_project, owner_auth_headers)
+    project_id = project_data["id"]
+
+    response = test_client.get(
+        f"/projects/{project_id}/tasks?sort={sort}",
+        headers=owner_auth_headers,
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+@pytest.mark.parametrize(
+    ("sort", "expected_titles"),
+    [
+        ("title", ["Alpha", "Bravo", "Charlie"]),
+        ("-title", ["Charlie", "Bravo", "Alpha"]),
+        ("priority", ["Bravo", "Alpha", "Charlie"]),
+        ("-priority", ["Charlie", "Alpha", "Bravo"]),
+        ("due_date", ["Bravo", "Alpha", "Charlie"]),
+        ("-due_date", ["Alpha", "Bravo", "Charlie"]),
+        ("status", ["Charlie", "Alpha", "Bravo"]),
+        ("-status", ["Bravo", "Alpha", "Charlie"]),
+    ],
+)
+def test_get_tasks_sort_by_field(
+    test_client,
+    test_owner,
+    test_project,
+    test_task,
+    auth_headers,
+    create_user,
+    create_task,
+    create_project,
+    test_db,
+    sort,
+    expected_titles,
+):
+    create_user(test_owner)
+    owner_auth_headers = auth_headers(test_owner)
+    project_data = create_project(test_project, owner_auth_headers)
+    project_id = project_data["id"]
+
+    task_payloads = [
+        {
+            "title": "Charlie",
+            "priority": TaskPriority.HIGH,
+            "due_date": None,
+        },
+        {
+            "title": "Alpha",
+            "priority": TaskPriority.MEDIUM,
+            "due_date": "2027-01-15T12:00:00Z",
+        },
+        {
+            "title": "Bravo",
+            "priority": TaskPriority.LOW,
+            "due_date": "2027-01-10T12:00:00Z",
+        },
+    ]
+
+    tasks = [
+        create_task(
+            project_id,
+            {**test_task, **payload},
+            owner_auth_headers,
+        )
+        for payload in task_payloads
+    ]
+
+    alpha = test_db.get(Task, UUID(tasks[1]["id"]))
+    bravo = test_db.get(Task, UUID(tasks[2]["id"]))
+
+    assert alpha is not None
+    assert bravo is not None
+
+    alpha.status = TaskStatus.IN_PROGRESS
+    bravo.status = TaskStatus.DONE
+    test_db.commit()
+
+    response = test_client.get(
+        f"/projects/{project_id}/tasks",
+        params={"sort": sort},
+        headers=owner_auth_headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()
+    assert data["total"] == 3
+    assert [task["title"] for task in data["items"]] == expected_titles

@@ -22,3 +22,13 @@ zip -r taskflow-api.zip taskflow-api \
      "*/.ruff_cache/*" \
      "*/.env" \
      "*/.env.*"
+
+# Fix lint issues
+uv run ruff check . --fix
+
+# Format code
+uv run ruff format .
+
+# Verify
+uv run ruff check .
+uv run ruff format --check .
